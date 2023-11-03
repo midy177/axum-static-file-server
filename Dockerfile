@@ -1,12 +1,19 @@
-FROM rust:1.68.0 AS builder
+# docker pull rust:alpine3.18
+FROM rust:alpine3.18 AS builder
 
 WORKDIR /app
 
+# apk add musl-dev
 COPY . /app/
-RUN cargo install --path . && \
-    cargo build --release
+RUN apk add musl-dev && \
+    cargo clean && \
+    cargo install --path . && \
+    cargo build --release && \
+    strip target/release/static-file-server
+# 减小体积
+# strip target/release/static-file-server
 
-FROM debian:stable
+FROM alpine:3.18
 
 ENV TZ="Asia/Shanghai"
 WORKDIR /app
