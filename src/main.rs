@@ -3,6 +3,7 @@ use axum::{
 };
 
 use std::net::SocketAddr;
+use axum::http::StatusCode;
 
 use tower_http::{
     services::{ServeDir, ServeFile},
@@ -12,6 +13,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use clap::Parser;
 use colored::Colorize;
+use tower_http::set_status::SetStatus;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -45,8 +47,11 @@ fn using_serve_dir_with_assets_fallback() -> Router {
     // `ServeDir` allows setting a fallback if an asset is not found
     // so with this `GET /assets/doesnt-exist.jpg` will return `index.html`
     // rather than a 404
+    // let serve_dir = ServeDir::new("assets").
+    //     not_found_service(ServeFile::new("assets/index.html"));
+    // rewrite 404 to 200
     let serve_dir = ServeDir::new("assets").
-        not_found_service(ServeFile::new("assets/index.html"));
+        fallback(SetStatus::new(ServeFile::new("assets/index.html"), StatusCode::OK));
 
     Router::new()
         // .route("/foo", get(|| async { "Hi from /foo" }))
