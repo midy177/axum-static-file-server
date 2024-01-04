@@ -48,12 +48,9 @@ fn using_serve_dir_with_assets_fallback() -> Router {
     // so with this `GET /assets/doesnt-exist.jpg` will return `index.html`
     // rather than a 404
     // rewrite 404 to 200
-    let serve_dir = ServeDir::new("assets").fallback(|p: PathBuf| {
-        println!("{}\n",p.to_str().unwrap());
+    let serve_dir = ServeDir::new("assets").fallback( {
         SetStatus::new(ServeFile::new("assets/index.html"), StatusCode::OK)
-    }
-    );
-
+    });
     Router::new()
         .nest_service("/", serve_dir.clone()).layer(TraceLayer::new_for_http())
 
