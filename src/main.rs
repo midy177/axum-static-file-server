@@ -1,19 +1,19 @@
-use axum::{
-    Router,
-};
+use axum::{Router};
 
 use std::net::SocketAddr;
-use axum::http::StatusCode;
+use std::path::PathBuf;
+use axum::body::Body;
+use axum::http::{Request, StatusCode, Uri};
 
 use tower_http::{
     services::{ServeDir, ServeFile},
-    trace::TraceLayer,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use clap::Parser;
 use colored::Colorize;
 use tower_http::set_status::SetStatus;
+use tower_http::trace::TraceLayer;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -47,23 +47,22 @@ fn using_serve_dir_with_assets_fallback() -> Router {
     // `ServeDir` allows setting a fallback if an asset is not found
     // so with this `GET /assets/doesnt-exist.jpg` will return `index.html`
     // rather than a 404
-    // let serve_dir = ServeDir::new("assets").
-    //     not_found_service(ServeFile::new("assets/index.html"));
     // rewrite 404 to 200
-    let serve_dir = ServeDir::new("assets").
-        fallback(SetStatus::new(ServeFile::new("assets/index.html"), StatusCode::OK));
+    let serve_dir = ServeDir::new("assets").fallback(|p: PathBuf| {
+        println!("{}\n",p.to_str().unwrap());
+        SetStatus::new(ServeFile::new("assets/index.html"), StatusCode::OK)
+    }
+    );
 
     Router::new()
-        // .route("/foo", get(|| async { "Hi from /foo" }))
-        .nest_service("/", serve_dir.clone())
-        .fallback_service(serve_dir)
+        .nest_service("/", serve_dir.clone()).layer(TraceLayer::new_for_http())
+
 }
 
 async fn serve(app: Router, port: u16) {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     print!("{} {}\n", "server listening on".italic().yellow(),addr.to_string().italic().green());
-    axum::Server::bind(&addr)
-        .serve(app.layer(TraceLayer::new_for_http()).into_make_service())
-        .await
-        .unwrap();
+    // run our app with hyper, listening globally on port 3000
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
