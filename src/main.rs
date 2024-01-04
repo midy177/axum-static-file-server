@@ -1,9 +1,7 @@
 use axum::{Router};
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
-use axum::body::Body;
-use axum::http::{Request, StatusCode, Uri};
+use axum::http::{ StatusCode };
 
 use tower_http::{
     services::{ServeDir, ServeFile},
