@@ -1,5 +1,5 @@
 # docker pull rust:alpine3.18
-FROM rust:alpine3.18 AS builder
+FROM rust:alpine3.19 AS builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ RUN apk add musl-dev && \
 # 减小体积
 # strip target/release/static-file-server
 
-FROM alpine:3.18
+FROM alpine:3.19
 
 ENV TZ="Asia/Shanghai"
 WORKDIR /app

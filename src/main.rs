@@ -1,17 +1,17 @@
-use axum::{Router};
+use axum::{
+    Router,
+};
 
 use std::net::SocketAddr;
-use axum::http::{ StatusCode };
 
 use tower_http::{
     services::{ServeDir, ServeFile},
+    trace::TraceLayer,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use clap::Parser;
 use colored::Colorize;
-use tower_http::set_status::SetStatus;
-use tower_http::trace::TraceLayer;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -45,13 +45,14 @@ fn using_serve_dir_with_assets_fallback() -> Router {
     // `ServeDir` allows setting a fallback if an asset is not found
     // so with this `GET /assets/doesnt-exist.jpg` will return `index.html`
     // rather than a 404
-    // rewrite 404 to 200
-    let serve_dir = ServeDir::new("assets").fallback( {
-        SetStatus::new(ServeFile::new("assets/index.html"), StatusCode::OK)
-    });
-    Router::new()
-        .nest_service("/", serve_dir.clone()).layer(TraceLayer::new_for_http())
+    let serve_dir = ServeDir::new("assets").
+        fallback(ServeFile::new("assets/index.html"));
+    // let serve_dir = ServeDir::new("assets").fallback( {
+    //     SetStatus::new(ServeFile::new("assets/index.html"), StatusCode::OK)
+    // });
 
+    Router::new()
+        .nest_service("/", serve_dir.clone())
 }
 
 async fn serve(app: Router, port: u16) {
@@ -59,5 +60,5 @@ async fn serve(app: Router, port: u16) {
     print!("{} {}\n", "server listening on".italic().yellow(),addr.to_string().italic().green());
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let _ = axum::serve(listener, app.layer(TraceLayer::new_for_http())).await.unwrap();
 }
