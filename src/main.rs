@@ -47,7 +47,7 @@ fn using_serve_dir_with_assets_fallback() -> Router {
     // });
 
     Router::new()
-        .nest_service("/", serve_dir.clone())
+        .nest_service("/", serve_dir)
 }
 
 async fn serve(app: Router, port: u16) {
