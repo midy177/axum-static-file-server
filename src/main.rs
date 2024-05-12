@@ -4,14 +4,12 @@ use axum::{
 
 use std::net::SocketAddr;
 
-use tower_http::{
-    services::{ServeDir, ServeFile},
-    trace::TraceLayer,
-};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tower_http::{services::{ServeDir, ServeFile}, trace, trace::TraceLayer};
+use tracing_subscriber::{util::SubscriberInitExt};
 
 use clap::Parser;
 use colored::Colorize;
+use tracing::Level;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -29,12 +27,9 @@ struct Args {
 #[tokio::main]
 async fn main() {
    let args = Args::parse();
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| format!("static_file_server={},tower_http={}",args.level, args.level).into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
+    tracing_subscriber::fmt()
+        .with_target(false)
+        .compact()
         .init();
     tokio::join!(
         serve(using_serve_dir_with_assets_fallback(), args.port.into()),
@@ -60,5 +55,8 @@ async fn serve(app: Router, port: u16) {
     print!("{} {}\n", "server listening on".italic().yellow(),addr.to_string().italic().green());
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    let _ = axum::serve(listener, app.layer(TraceLayer::new_for_http())).await.unwrap();
+    let tl=TraceLayer::new_for_http()
+        .make_span_with(trace::DefaultMakeSpan::new().level(Level::INFO))
+        .on_response(trace::DefaultOnResponse::new().level(Level::INFO));
+    axum::serve(listener, app.layer(tl)).await.unwrap();
 }

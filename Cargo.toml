@@ -13,5 +13,6 @@ tower = { version = "0.4.13", features = ["util"] }
 tower-http = { version = "0.5.2", features = ["fs", "trace"] }
 tracing = "0.1.40"
 colored="2.0.4"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.17", features = ["env-filter", "json"] }
 hyper = "1.2.0"
+log = "0.4.21"
