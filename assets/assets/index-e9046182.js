@@ -1,0 +1,1 @@
+import{o}from"./vendor-base-cc18fcff.js";import{an as t}from"./shared-4873712f.js";import"./vendor-c76f9059.js";import"./__commonjsHelpers__-23102255.js";import"./i18n-helper-ef5bc359.js";import"./style-shared-6740825f.js";import"./style-pages-42a62cad.js";const x=()=>o.jsx(t,{});export{x as default};
