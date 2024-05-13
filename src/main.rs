@@ -5,7 +5,6 @@ use axum::{
 use std::net::SocketAddr;
 
 use tower_http::{services::{ServeDir, ServeFile}, trace, trace::TraceLayer};
-use tracing_subscriber::{util::SubscriberInitExt};
 
 use clap::Parser;
 use colored::Colorize;
@@ -15,10 +14,6 @@ use tracing::Level;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-   /// Level of the log print,etc: info debug warn error
-   #[arg(short, long, default_value = "debug")]
-   level: String,
-
    /// Port of Listening
    #[arg(short, long, default_value_t = 3000)]
    port: u16,
