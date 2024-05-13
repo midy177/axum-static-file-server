@@ -26,9 +26,10 @@ async fn main() {
         .with_target(false)
         .compact()
         .init();
-    tokio::join!(
-        serve(using_serve_dir_with_assets_fallback(), args.port.into()),
-    );
+    serve(using_serve_dir_with_assets_fallback(), args.port.into()).await;
+    // tokio::join!(
+    //     serve(using_serve_dir_with_assets_fallback(), args.port.into()),
+    // );
 }
 
 fn using_serve_dir_with_assets_fallback() -> Router {
