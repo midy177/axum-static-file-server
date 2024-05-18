@@ -16,3 +16,4 @@ colored="2.0.4"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter", "json"] }
 hyper = "1.2.0"
 log = "0.4.21"
+mime = "0.3.17"

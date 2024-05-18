@@ -814,6 +814,7 @@ dependencies = [
  "colored",
  "hyper",
  "log",
+ "mime",
  "tokio",
  "tower",
  "tower-http",

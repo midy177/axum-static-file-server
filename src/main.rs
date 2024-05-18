@@ -1,13 +1,16 @@
 use axum::{
-    Router,
+    handler::HandlerWithoutStateExt, http::StatusCode, routing::get, Router,
 };
 
 use std::net::SocketAddr;
+use axum::http::{header, HeaderMap, HeaderName, HeaderValue};
+use axum::response::Html;
 
 use tower_http::{services::{ServeDir, ServeFile}, trace, trace::TraceLayer};
 
 use clap::Parser;
 use colored::Colorize;
+use tokio::fs;
 use tracing::Level;
 
 /// Simple program to greet a person
@@ -26,24 +29,29 @@ async fn main() {
         .with_target(false)
         .compact()
         .init();
-    serve(using_serve_dir_with_assets_fallback(), args.port.into()).await;
+    serve(using_serve_dir_with_handler_as_service(), args.port.into()).await;
     // tokio::join!(
     //     serve(using_serve_dir_with_assets_fallback(), args.port.into()),
     // );
 }
 
-fn using_serve_dir_with_assets_fallback() -> Router {
-    // `ServeDir` allows setting a fallback if an asset is not found
-    // so with this `GET /assets/doesnt-exist.jpg` will return `index.html`
-    // rather than a 404
-    let serve_dir = ServeDir::new("assets").
-        fallback(ServeFile::new("assets/index.html"));
-    // let serve_dir = ServeDir::new("assets").fallback( {
-    //     SetStatus::new(ServeFile::new("assets/index.html"), StatusCode::OK)
-    // });
+fn using_serve_dir_with_handler_as_service() -> Router {
+    async fn handle_404() -> (StatusCode,HeaderMap, String) {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()),
+        );
+        (StatusCode::OK, headers,fs::read_to_string("assets/index.html").await.unwrap())
+    }
+
+    // you can convert handler function to service
+    let service = handle_404.into_service();
+
+    let serve_dir = ServeDir::new("assets").fallback(service);
 
     Router::new()
-        .nest_service("/", serve_dir)
+        .nest_service("",serve_dir)
 }
 
 async fn serve(app: Router, port: u16) {
