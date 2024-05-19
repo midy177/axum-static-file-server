@@ -815,6 +815,8 @@ dependencies = [
  "hyper",
  "log",
  "mime",
+ "mime_guess",
+ "once_cell",
  "tokio",
  "tower",
  "tower-http",
