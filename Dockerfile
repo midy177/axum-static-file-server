@@ -23,6 +23,4 @@ COPY --from=builder /app/target/release/static-file-server /app/
 RUN mkdir /app/assets/ && \
     ln -s /app/static-file-server /usr/local/bin/static-file-server
 
-COPY assets/ /app/assets/
-
 CMD ["static-file-server"]
