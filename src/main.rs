@@ -110,16 +110,21 @@ fn prepare_index_headers(path:PathBuf,header_strs:&Vec<String>)->HeaderMap {
         .unwrap_or_else(|| {
             HeaderValue::from_str(mime::APPLICATION_OCTET_STREAM.as_ref()).unwrap()
         });
-    let mut html5_headers=parse_headers(header_strs);
-    html5_headers.insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("no-cache"),
-    );
-    html5_headers.insert(
-        header::CONTENT_TYPE,
-        mime_value,
-    );
-    html5_headers
+    let mut index_headers=parse_headers(header_strs);
+    if !index_headers.contains_key(header::CACHE_CONTROL) {
+        index_headers.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        );
+    }
+    if !index_headers.contains_key(header::CONTENT_TYPE) {
+        index_headers.insert(
+            header::CONTENT_TYPE,
+            mime_value,
+        );
+    }
+
+    index_headers
 }
 fn parse_headers(header_strs:&Vec<String>)->HeaderMap{
     let mut headers = HeaderMap::new();
