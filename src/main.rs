@@ -1,3 +1,5 @@
+mod logx;
+
 use std::convert::Infallible;
 use clap::{ArgAction};
 use axum::{handler::HandlerWithoutStateExt, http::StatusCode, middleware, Router};
@@ -10,15 +12,13 @@ use axum::body::Body;
 use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Request, Response};
 use axum::middleware::Next;
 
-use tower_http::{services::ServeDir, trace, trace::TraceLayer};
+use tower_http::{services::ServeDir, trace::TraceLayer};
 
 use clap::Parser;
 use colored::Colorize;
+use log::{error, info};
 use tokio::fs;
 use once_cell::sync::OnceCell;
-
-use tower_http::trace::HttpMakeClassifier;
-use tracing::Level;
 
 #[derive(Parser, Debug)]
 #[command(name = "axum static file server", version = "1.0",
@@ -54,6 +54,7 @@ struct Args {
 static ARGS: OnceCell<Args> = OnceCell::new();
 #[tokio::main]
 async fn main() {
+    logx::init_logger();
     let mut args= Args::parse();
     args.index_header_map = prepare_index_headers(
         PathBuf::from(&args.root).join(&args.index),
@@ -63,23 +64,20 @@ async fn main() {
     ARGS.set(args).expect("Failed to set global Args");
     let args = ARGS.get().unwrap();
     println!("CLI {:?}",args);
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .compact()
-        .init();
+
     let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
     print!("{} {}\n", "server listening on".italic().yellow(),addr.to_string().italic().green());
 
-    let r =using_serve_dir_with_try_file_as_service();
-
-    let tl: TraceLayer<HttpMakeClassifier> =TraceLayer::new_for_http()
-        .make_span_with(trace::DefaultMakeSpan::new().level(Level::INFO))
-        .on_response(trace::DefaultOnResponse::new().level(Level::INFO));
-
-    axum::serve(listener, r.layer(tl).layer(middleware::from_fn(fix_header_middleware))).await.unwrap();
+    let app =using_serve_dir_with_try_file_as_service()
+        .layer(
+            TraceLayer::new_for_http()
+            .make_span_with(logx::make_span_x)
+            .on_response(logx::on_response_x)
+        ).layer(middleware::from_fn(fix_header_middleware));
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn try_file() -> (StatusCode, HeaderMap, String) {
@@ -136,21 +134,21 @@ fn parse_headers(header_strs:&Vec<String>)->HeaderMap{
 
             if let Ok(header_name) = HeaderName::from_str(key) {
                 if let Ok(num) = value.parse::<u64>() {
-                    println!("Parsed number: {}", num);
+                    info!("Parsed number: {}", num);
                     headers.insert(header_name, HeaderValue::from(num));
                 } else {
-                    println!("Failed to parse number");
+                    info!("Failed to parse number");
                     if let Ok(header_value) = HeaderValue::from_str(&value) {
                         headers.insert(header_name, header_value);
                     }else {
-                        eprintln!("Invalid str header value: '{}'", value);
+                        error!("Invalid str header value: '{}'", value);
                     }
                 }
             } else {
-                eprintln!("Invalid header name: '{}'", key);
+                error!("Invalid header name: '{}'", key);
             }
         } else {
-            eprintln!("Invalid header format: '{}'", header_str);
+            error!("Invalid header format: '{}'", header_str);
         }
     }
     headers
@@ -171,7 +169,7 @@ async fn fix_header_middleware(
         }
     }
     if uri.eq("/") {
-        println!("{}",uri);
+        info!("{}",uri);
         for (name, value) in args.index_header_map.iter() {
             if !mut_resp_headers.contains_key(header::CACHE_CONTROL) {
                 mut_resp_headers.insert(name.clone(), value.clone());

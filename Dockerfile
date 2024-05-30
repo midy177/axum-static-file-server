@@ -18,9 +18,9 @@ FROM alpine:3.19
 ENV TZ="Asia/Shanghai"
 WORKDIR /app
 
-COPY --from=builder /app/target/release/static-file-server /app/
+COPY --from=builder /app/target/release/static-file-server /usr/local/bin/
 
 RUN mkdir /app/assets/ && \
-    ln -s /app/static-file-server /usr/local/bin/static-file-server
+    chmod +x /usr/local/bin/static-file-server
 
 CMD ["static-file-server"]
