@@ -1,7 +1,12 @@
-use axum::http::{Request, Response};
+use std::net::SocketAddr;
 use std::time::Duration;
+
+use axum::extract::ConnectInfo;
+use axum::http::{Request, Response};
+use http::HeaderMap;
 use tracing::{Level, Span};
 use tracing_subscriber::fmt;
+
 pub(crate) fn init_logger() {
     let format = fmt::format()
         .with_level(true) // don't include levels in formatted output
@@ -27,10 +32,36 @@ pub(crate) fn init_logger() {
 
 
 pub(crate) fn make_span_x<B>(request: &Request<B>) -> Span {
+    // 从请求的 extensions 中获取 `ConnectInfo<SocketAddr>`
+    let client_addr = match request.extensions().get::<ConnectInfo<SocketAddr>>() {
+        Some(ConnectInfo(addr)) => addr.to_string(),
+        None => match request
+            .headers()
+            .get("x-forwarded-for")
+            .and_then(|header| header.to_str().ok())
+            .and_then(|x| x.parse::<SocketAddr>().ok())
+        {
+            Some(addr) => addr.to_string(),
+            None => "unknown".to_string(),
+        },
+    };
+
+    // 提取 User-Agent
+    let headers: &HeaderMap = request.headers();
+    let user_agent = headers
+        .get(http::header::USER_AGENT)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("unknown");
+
+    let method = request.method().to_string();
+    let uri = request.uri().to_string();
+
     tracing::info_span!(
-        "request->response",
-        method = request.method().to_string(),
-        uri = request.uri().to_string(),
+        "",
+        method,
+        client_addr,
+        uri,
+        user_agent,
     )
 }
 

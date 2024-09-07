@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Error, ErrorKind, Read, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -12,7 +12,11 @@ use axum::{
     response::Response,
     Router,
 };
+use axum::body::Body;
+use axum::extract::{ConnectInfo, Request};
 use axum::http::{header, HeaderMap, HeaderName, HeaderValue};
+use axum::middleware::Next;
+use axum::response::IntoResponse;
 use brotli::CompressorWriter;
 use clap::ArgAction;
 use clap::Parser;
@@ -38,35 +42,35 @@ async fn fix_response_headers_middleware<B>(
     mut response: Response<B>,
 ) -> Response<B> {
     let mut_resp_headers = response.headers_mut();
-    if let Some(content_type) = mut_resp_headers.get(header::CONTENT_TYPE) {
-        if let Ok(content_type_str) = content_type.to_str() {
-            if content_type_str.starts_with("text/html") {
-                if let Some(cache_control) = mut_resp_headers.get(header::CACHE_CONTROL) {
-                    if let Ok(cache_control_str) = cache_control.to_str() {
-                        // 检查是否已经包含 no-cache
-                        if !cache_control_str.contains("no-cache") {
-                            // 如果没有 no-cache，则设置为 no-cache
-                            mut_resp_headers.insert(
-                                header::CACHE_CONTROL,
-                                HeaderValue::from_static("no-cache")
-                            );
-                        }
-                    }
-                } else {
+
+    // 优化 content-type 处理逻辑
+    match mut_resp_headers.get(header::CONTENT_TYPE).and_then(|ct| ct.to_str().ok()) {
+        Some(content_type_str) if content_type_str.starts_with("text/html") => {
+            match mut_resp_headers.get(header::CACHE_CONTROL).and_then(|cc| cc.to_str().ok()) {
+                Some(cache_control_str) if !cache_control_str.contains("no-cache") => {
+                    mut_resp_headers.insert(
+                        header::CACHE_CONTROL,
+                        HeaderValue::from_static("no-cache"),
+                    );
+                }
+                None => {
                     // 如果没有 CACHE_CONTROL 头部，则添加一个 no-cache 头部
                     mut_resp_headers.insert(
                         header::CACHE_CONTROL,
-                        HeaderValue::from_static("no-cache")
+                        HeaderValue::from_static("no-cache"),
                     );
                 }
-            };
+                _ => {}
+            }
         }
+        _ => {}
     }
 
+    // 插入 state.headers 的内容
     for (name, value) in state.headers.iter() {
-            mut_resp_headers.insert(name.clone(), value.clone());
+        mut_resp_headers.insert(name.clone(), value.clone());
     }
-    // do something with `state` and `response`...
+
     response
 }
 
@@ -89,46 +93,69 @@ fn static_file(
         server_dir.fallback(fallback_service)
     ).route_layer(map_response_with_state(state, fix_response_headers_middleware))
 }
-fn parse_headers(header_strs:&Vec<String>)->HeaderMap{
+fn parse_headers(header_strs: &Vec<String>) -> HeaderMap {
     let mut headers = HeaderMap::new();
+
     for header_str in header_strs {
         let parts: Vec<&str> = header_str.splitn(2, ':').collect();
-        if parts.len() == 2 {
-            let key = parts[0].trim();
-            let value = parts[1].trim().to_string();
 
-            if let Ok(header_name) = HeaderName::from_str(key) {
-                if let Ok(num) = value.parse::<u64>() {
-                    // info!("Parsed number: {}", num);
-                    headers.insert(header_name, HeaderValue::from(num));
-                } else {
-                    // info!("Failed to parse number");
-                    if let Ok(header_value) = HeaderValue::from_str(&value) {
-                        headers.insert(header_name, header_value);
-                    }else {
-                        error!("Invalid str header value: '{}'", value);
+        match parts.as_slice() {
+            [key, value] => {
+                let key = key.trim();
+                let value = value.trim();
+
+                match HeaderName::from_str(key) {
+                    Ok(header_name) => {
+                        match value.parse::<u64>() {
+                            Ok(num) => {
+                                headers.insert(header_name, HeaderValue::from(num));
+                            }
+                            Err(_) => {
+                                match HeaderValue::from_str(value) {
+                                    Ok(header_value) => {
+                                        headers.insert(header_name, header_value);
+                                    }
+                                    Err(_) => {
+                                        error!("Invalid str header value: '{}'", value);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        error!("Invalid header name: '{}'", key);
                     }
                 }
-            } else {
-                error!("Invalid header name: '{}'", key);
             }
-        } else {
-            error!("Invalid header format: '{}'", header_str);
+            _ => {
+                error!("Invalid header format: '{}'", header_str);
+            }
         }
     }
+
     println!("{}\n {:#?}", "header map:".italic().bright_green(), headers);
     headers
 }
 
 fn compress_file_to_brotli(src_path: &Path, dest_path: &Path) -> std::io::Result<()> {
+    let metadata = std::fs::metadata(src_path)?;
+    let file_size = metadata.len();
+
+    // 仅对大于 MIN_SIZE 的文件进行压缩
+    if file_size < 1024 { // 小于1k的文件不做压缩
+        let error_message = format!("File is too small(<1k) to compress. Size: {} bytes", file_size);
+        return Err(Error::new(ErrorKind::InvalidInput, error_message));
+    }
+
     let mut input_file = File::open(src_path)?;
-    let mut output_file = CompressorWriter::new(File::create(dest_path)?, 4096, 5, 20);
+    let mut output_file = CompressorWriter::new(File::create(dest_path)?, 4096, 8, 24);
     let mut buffer = Vec::new();
 
     input_file.read_to_end(&mut buffer)?;
     output_file.write_all(&buffer)?;
     Ok(())
 }
+
 fn has_brotli_extension(path: &Path) -> bool {
     if let Some(extension) = path.extension() {
         if let Some(extension_str) = extension.to_str() {
@@ -157,20 +184,37 @@ fn compress_directory_to_brotli(dir: &str) -> std::io::Result<()> {
 
                 // 判断压缩文件是否已经存在
                 if !compressed_file_path.exists() {
-                    info!("{} {} -> {}",
-                        "Compressing:".italic().bright_blue(),
-                        path.to_str().unwrap_or("None").italic().bright_blue(),
-                        compressed_file_path.to_str().unwrap_or("None").italic().bright_blue());
-                    compress_file_to_brotli(path, &compressed_file_path)?;
+                    // compress_file_to_brotli(path, &compressed_file_path)?;
+                    match compress_file_to_brotli(path, &compressed_file_path) {
+                        Ok(()) => info!("{} {} -> {}",
+                            "File compressed successfully:".italic().bright_blue(),
+                            path.to_str().unwrap_or("None").italic().bright_blue(),
+                            compressed_file_path.to_str().unwrap_or("None").italic().bright_blue()),
+                        Err(e) => error!("{} {} -> {} err: {}",
+                            "During compressing:".italic().bright_red(),
+                            path.to_str().unwrap_or("None").italic().bright_red(),
+                            compressed_file_path.to_str().unwrap_or("None").italic().bright_red(),
+                            e.to_string().italic().bright_red()),
+                    }
                 } else {
                     warn!("{} {}",
-                        "Compressed (.br)file already exists: ".italic().bright_yellow(),
+                        "Compressed file already exists: ".italic().bright_yellow(),
                         compressed_file_path.to_str().unwrap_or("none").italic().bright_yellow());
                 }
             }
         }
     }
     Ok(())
+}
+
+// 中间件：用于将 ConnectInfo 插入到请求扩展中
+async fn inject_connect_info(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    mut req: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    req.extensions_mut().insert(ConnectInfo(addr));
+    next.run(req).await
 }
 
 #[derive(Parser, Debug)]
@@ -222,11 +266,13 @@ async fn main() {
     });
 
     let app = Router::new().nest("/",static_file(state.clone()))
+        .layer(axum::middleware::from_fn(inject_connect_info))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(logx::make_span_x)
                 .on_response(logx::on_response_x)
-        );
+        )
+        .into_make_service_with_connect_info::<SocketAddr>();
 
     let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
 
@@ -234,8 +280,9 @@ async fn main() {
     // 提前压缩文件
     if args.br {
         spawn(move|| {
+            info!("{}","Start to compress directory to brotli...".italic().bright_cyan());
             compress_directory_to_brotli(args.root.as_str()).unwrap();
-            info!("{}","compress_directory_to_brotli success!".italic().green());
+            info!("{}","Compress directory to brotli success!".italic().green());
         });
     }
     println!("\n{} {}\n",
