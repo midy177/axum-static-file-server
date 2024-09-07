@@ -36,7 +36,7 @@ struct AppState {
     br: bool,
 }
 
-async fn my_middleware<B>(
+async fn fix_response_headers_middleware<B>(
     State(state): State<Arc<AppState>>,
     mut response: Response<B>,
 ) -> Response<B> {
@@ -90,7 +90,7 @@ pub fn static_file(
     Router::new().nest_service(
         "/",
         server_dir.fallback(fallback_service)
-    ).route_layer(map_response_with_state(state, my_middleware))
+    ).route_layer(map_response_with_state(state, fix_response_headers_middleware))
 }
 fn parse_headers(header_strs:&Vec<String>)->HeaderMap{
     let mut headers = HeaderMap::new();
