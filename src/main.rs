@@ -1,11 +1,9 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::SocketAddr;
-use std::os::macos::raw::stat;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::thread;
 use std::thread::spawn;
 
 use axum::{
@@ -20,7 +18,6 @@ use clap::ArgAction;
 use clap::Parser;
 use colored::Colorize;
 use log::{error, info, warn};
-use mime_guess::mime;
 use tower_http::services::ServeDir;
 use tower_http::services::ServeFile;
 use tower_http::trace::TraceLayer;
@@ -73,7 +70,7 @@ async fn fix_response_headers_middleware<B>(
     response
 }
 
-pub fn static_file(
+fn static_file(
     state: Arc<AppState>
 ) -> Router {
     let root_dir = state.root.clone();
