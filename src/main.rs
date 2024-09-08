@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Write};
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -274,7 +274,7 @@ async fn main() {
         )
         .into_make_service_with_connect_info::<SocketAddr>();
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
+    let addr = SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), args.port);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     // 提前压缩文件
